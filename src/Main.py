@@ -42,15 +42,24 @@ def start_point_get(event):
     ret = messagebox.askyesno('確認', f'{msg}の箇所をファイル名にしますか？')
     if ret:
         useTextbbox = results[0][useTextIndex]['bbox']
+        image_dir = Path("../OUT")
+        notOutput = []
         for index, page in enumerate(pages):
             filename = ''
             for row in results[index]:
                 if row['bbox'] == useTextbbox:
                     filename = row['text'].replace('\n', '') + '.jpeg'
-            image_dir = Path("../OUT")
-            image_path = image_dir / filename
-            # JPEGで保存
-            page.save(str(image_path), "JPEG")
+            if filename != '':
+                image_path = image_dir / filename
+                is_file = os.path.isfile(image_path)
+                if is_file:
+                    filename = row['text'].replace('\n', '') + '.jpeg'
+                # JPEGで保存
+                page.save(str(image_path), "JPEG")
+            else :
+                notOutput.append(index)
+
+
 
 if __name__ == "__main__":
     # 標準組込み関数open()でモード指定をbinaryでFileオブジェクトを取得
