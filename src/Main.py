@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 from pdf2image import convert_from_path
 import tkinter as tk
+from tkinter import messagebox
 from PIL import Image, ImageTk, ImageDraw
 import numpy as np
 
@@ -28,9 +29,29 @@ def get_objs(layout, results):
             results.append({'bbox': obj.bbox, 'text' : obj.get_text(), 'type' : type(obj)})
         get_objs(obj, results)
 
+
+def start_point_get(event):
+    global start_x, start_y  # グローバル変数に書き込みを行なうため宣言
+    canvas.delete("rect1")  # すでに"rect1"タグの図形があれば削除
+    # グローバル変数に座標を格納
+    start_x, start_y = event.x, event.y
+    for index, row in enumerate(cordinate):
+        if row[0] <= start_x <= row[2] and row[3] <= start_y <= row[1]:
+            useTextIndex = index
+    msg = results[0][useTextIndex]['text']
+    ret = messagebox.askyesno('確認', f'{msg}の箇所をファイル名にしますか？')
+    if ret:
+        useTextbbox = results[0][useTextIndex]['bbox']
+        for index, page in enumerate(pages):
+            filename = ''
+            for row in results[index]:
+                if row['bbox'] == useTextbbox:
+                    filename = row['text']
+            print(filename)
+
 if __name__ == "__main__":
     # 標準組込み関数open()でモード指定をbinaryでFileオブジェクトを取得
-    pdfpath = "F:\\TsuhanTests\DirectAce\\trunk\\06_PF\\14_PF出荷GMO用納品書追加\\比較テスト\\テスト結果\\GMO\\出力納品書\\データ③\\1.pdf"
+    pdfpath = "F:\\TsuhanTests\DirectAce\\trunk\\06_PF\\14_PF出荷GMO用納品書追加\\比較テスト\\テスト結果\\GMO\\出力納品書\\データ①\\1.pdf"
 
     fp = open(pdfpath, 'rb')
 
@@ -47,12 +68,14 @@ if __name__ == "__main__":
     results = []
     size = []
     for page in PDFPage.get_pages(fp):
+        pagetext = []
         if (size == []):
             size = page.mediabox
         iprtr.process_page(page)
         layout = device.get_result()
-        get_objs(layout, results)
-    print(size)
+        get_objs(layout, pagetext)
+        results.append(np.array(pagetext))
+    print(np.array(results))
     outfp.close()  # I/Oストリームを閉じる
     device.close() # TextConverterオブジェクトの解放
     fp.close()     #  Fileストリームを閉じる
@@ -67,33 +90,26 @@ if __name__ == "__main__":
     RESIZE_RETIO = 0.7 # 縮小倍率の規定
     img = pages[0]
     ## 枠線を追加する。
-    draw_img = ImageDraw.Draw(img)
     height_ratio = img.height / size[3]
     width_ratio  = img.width / size[2]
-    for row in results:
-        line = np.array(row['bbox'])
-        # line[0] = 左下からの横軸の距離
-        # line[1] = 左下からの縦軸の距離
-        # line[2] = 横幅
-        # line[3] = 縦幅
 
-        # x0 = 左上のx座標
-        # y0 = 左上のy座標
-        # x1 = 右下のx座標
-        # y1 = 右下のy座標
+    draw_img = ImageDraw.Draw(img)
+    cordinate = []
+    for page in results[0]:
+        line = page['bbox']
         x0 = line[0] * width_ratio
         y0 = img.height - line[1] * height_ratio
         x1 = line[2] * width_ratio
         y1 = img.height - line[3] * height_ratio
-
         rect = (x0, y0, x1, y1)
-
-        line = line.tolist()
+        cordinate.append(rect)
         draw_img.rectangle(rect, outline=(0, 0, 0))
-
+    cordinate = np.array(cordinate)*RESIZE_RETIO
+    cordinate = cordinate.tolist()
     img = img.resize(size=(int(img.width * RESIZE_RETIO), int(img.height * RESIZE_RETIO)), resample=Image.BILINEAR)
     root = tk.Tk()
     canvas = tk.Canvas(root, width=img.width, height=img.height)
+    canvas.bind("<ButtonPress-1>", start_point_get)
     canvas.pack()
 
     canvas.Photo = ImageTk.PhotoImage(img)
