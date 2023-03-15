@@ -47,7 +47,7 @@ def start_point_get(event):
             for row in results[index]:
                 if row['bbox'] == useTextbbox:
                     filename = row['text'].replace('\n', '') + '.jpeg'
-            image_dir = Path("./")
+            image_dir = Path("../OUT")
             image_path = image_dir / filename
             # JPEGで保存
             page.save(str(image_path), "JPEG")
