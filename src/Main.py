@@ -46,8 +46,11 @@ def start_point_get(event):
             filename = ''
             for row in results[index]:
                 if row['bbox'] == useTextbbox:
-                    filename = row['text']
-            print(filename)
+                    filename = row['text'].replace('\n', '') + '.jpeg'
+            image_dir = Path("./")
+            image_path = image_dir / filename
+            # JPEGで保存
+            page.save(str(image_path), "JPEG")
 
 if __name__ == "__main__":
     # 標準組込み関数open()でモード指定をbinaryでFileオブジェクトを取得
