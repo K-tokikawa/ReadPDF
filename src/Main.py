@@ -20,6 +20,8 @@ import tkinter as tk
 from tkinter import messagebox
 from PIL import Image, ImageTk, ImageDraw
 import numpy as np
+import TkFilePath
+import TkFolderPath
 
 def get_objs(layout, results):
     if not isinstance(layout, LTContainer):
@@ -42,28 +44,59 @@ def start_point_get(event):
     ret = messagebox.askyesno('確認', f'{msg}の箇所をファイル名にしますか？')
     if ret:
         useTextbbox = results[0][useTextIndex]['bbox']
-        image_dir = Path("../OUT")
         notOutput = []
         for index, page in enumerate(pages):
             filename = ''
             for row in results[index]:
                 if row['bbox'] == useTextbbox:
-                    filename = row['text'].replace('\n', '') + '.jpeg'
+                    filename = row['text'].replace('\n', '')
             if filename != '':
-                image_path = image_dir / filename
+                image_path = image_dir / f'{filename}.jpeg'
                 is_file = os.path.isfile(image_path)
-                if is_file:
-                    filename = row['text'].replace('\n', '') + '.jpeg'
+                num = 0
+                while is_file:
+                    num += 1
+                    existfilename = filename + f'_{num}' + '.jpeg'
+                    image_path = image_dir / existfilename
+                    is_file = os.path.isfile(image_path)
                 # JPEGで保存
                 page.save(str(image_path), "JPEG")
             else :
-                notOutput.append(index)
+                image_dir.append(index)
 
+        errorTextPath = image_dir / 'Error.csv'
+        if image_dir != []:
+            if (os.path.isfile(errorTextPath)):
+                f = open(errorTextPath, 'w')
+                f.writelines(notOutput)
+            else :
+                f = open(errorTextPath, 'x')
+                f.writelines(notOutput)
+        
+        canvas.destroy()
+        root.destroy()
 
-
+def tgr_Button_Func(self):
+    iDir = os.path.abspath(os.path.dirname(__file__))
+    self.selected_file_path = tk.filedialog.askdirectory(
+        initialdir=iDir)
+    self.tgr_text.delete(0, tk.END)
+    self.tgr_text.insert(tk.END, self.selected_file_path)
+    self.tgr_path = self.selected_file_path
 if __name__ == "__main__":
     # 標準組込み関数open()でモード指定をbinaryでFileオブジェクトを取得
-    pdfpath = "F:\\TsuhanTests\DirectAce\\trunk\\06_PF\\14_PF出荷GMO用納品書追加\\比較テスト\\テスト結果\\GMO\\出力納品書\\データ①\\1.pdf"
+    root = tk.Tk()
+    root.geometry("800x400")
+    app = TkFilePath.TkFilePath(root)
+    app.mainloop()
+    pdfpath = app.tgr_path
+
+    root = tk.Tk()
+    root.geometry("800x400")
+    appFolder = TkFolderPath.TkFolderPath(root)
+    appFolder.mainloop()
+    image_dir = Path(appFolder.tgr_directory)
+    print(appFolder.tgr_directory)
 
     fp = open(pdfpath, 'rb')
 
