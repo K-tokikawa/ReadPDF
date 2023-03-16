@@ -18,7 +18,7 @@ from PIL import Image, ImageTk, ImageDraw
 import numpy as np
 import TkFilePath
 import TkFolderPath
-
+import glob
 def get_objs(layout, results):
     if not isinstance(layout, LTContainer):
         return
@@ -36,32 +36,37 @@ def start_point_get(event):
     for index, row in enumerate(cordinate):
         if row[0] <= start_x <= row[2] and row[3] <= start_y <= row[1]:
             useTextIndex = index
-    msg = results[0][useTextIndex]['text']
+    msg = dicPDFdataByFile[0][0][useTextIndex]['text']
     ret = messagebox.askyesno('確認', f'{msg}の箇所をファイル名にしますか？')
     if ret:
-        useTextbbox = results[0][useTextIndex]['bbox']
+        useTextbbox = dicPDFdataByFile[0][0][useTextIndex]['bbox']
         notOutput = []
-        for index, page in enumerate(pages):
-            filename = ''
-            for row in results[index]:
-                if row['bbox'] == useTextbbox:
-                    filename = row['text'].replace('\n', '')
-            if filename != '':
-                image_path = image_dir / f'{filename}.jpeg'
-                is_file = os.path.isfile(image_path)
-                num = 0
-                while is_file:
-                    num += 1
-                    existfilename = filename + f'_{num}' + '.jpeg'
-                    image_path = image_dir / existfilename
+        for fileindex, page in enumerate(pdfOneFileData.values()):
+            for dataindex, data in enumerate(page[1]):
+                filename = ''
+                for row in dicPDFdataByFile[fileindex][dataindex]:
+                    if row['bbox'] == useTextbbox:
+                        filename = str(row['text'].replace('\n', ''))
+                        break
+                if filename != '':
+                    folderpath = out_dir / f'{page[0]}'
+                    if not os.path.isdir(folderpath):
+                        os.makedirs(folderpath)
+                    image_path = folderpath / f'{filename}.jpeg'
                     is_file = os.path.isfile(image_path)
-                # JPEGで保存
-                page.save(str(image_path), "JPEG")
-            else :
-                image_dir.append(index)
+                    num = 0
+                    while is_file:
+                        num += 1
+                        existfilename = filename + f'_{num}' + '.jpeg'
+                        image_path = folderpath / existfilename
+                        is_file = os.path.isfile(image_path)
+                    # JPEGで保存
+                    data.save(str(image_path), "JPEG")
+                else :
+                    notOutput.append(fileindex)
 
-        errorTextPath = image_dir / 'Error.csv'
-        if image_dir != []:
+        errorTextPath = out_dir / 'Error.csv'
+        if out_dir != []:
             if (os.path.isfile(errorTextPath)):
                 f = open(errorTextPath, 'w')
                 f.writelines(notOutput)
@@ -80,63 +85,83 @@ def tgr_Button_Func(self):
     self.tgr_text.insert(tk.END, self.selected_file_path)
     self.tgr_path = self.selected_file_path
 if __name__ == "__main__":
-    # 標準組込み関数open()でモード指定をbinaryでFileオブジェクトを取得
+    # 出力先をPythonコンソールするためにIOストリームを取得
+    outfp = StringIO()
+
+    # 各種テキスト抽出に必要なPdfminer.sixのオブジェクトを取得する処理
+    rmgr = PDFResourceManager()  # PDFResourceManagerオブジェクトの取得
+    lprms = LAParams()          # LAParamsオブジェクトの取得
+    device = PDFPageAggregator(rmgr, laparams=lprms)
+    iprtr = PDFPageInterpreter(rmgr, device)  # PDFPageInterpreterオブジェクトの取得
+
+    # PDFを指定して取得する
     root = tk.Tk()
     root.geometry("800x400")
     app = TkFilePath.TkFilePath(root)
     app.mainloop()
     pdfpath = app.tgr_path
+    pdffolderpath = app.tgr_directory
+    # pdffolderpath = 'F:\\TsuhanTests\\DirectAce\\trunk\\06_PF\\14_PF出荷GMO用納品書追加\\比較テスト\\テスト結果\\アトディーネ比較\\GMO\\データ①\\納品書'
 
     root = tk.Tk()
     root.geometry("800x400")
     appFolder = TkFolderPath.TkFolderPath(root)
     appFolder.mainloop()
-    image_dir = Path(appFolder.tgr_directory)
-    print(appFolder.tgr_directory)
+    out_dir = Path(appFolder.tgr_directory)
+    # out_dir = Path('../')
 
-    fp = open(pdfpath, 'rb')
+    filepath = []
+    if len(pdffolderpath) != 0:
+        filepath = glob.glob(pdffolderpath + '/*.pdf')
+    else :
+        filepath.append(pdfpath)
 
-    # 出力先をPythonコンソールするためにIOストリームを取得
-    outfp = StringIO()
-
-    # 各種テキスト抽出に必要なPdfminer.sixのオブジェクトを取得する処理
-    rmgr = PDFResourceManager() # PDFResourceManagerオブジェクトの取得
-    lprms = LAParams()          # LAParamsオブジェクトの取得
-    device = PDFPageAggregator(rmgr, laparams=lprms)
-    iprtr = PDFPageInterpreter(rmgr, device) # PDFPageInterpreterオブジェクトの取得
-
-    # PDFファイルから1ページずつ解析(テキスト抽出)処理する
-    results = []
+    dicPDFdataByFile = {}
     size = []
-    for page in PDFPage.get_pages(fp):
-        pagetext = []
-        if (size == []):
-            size = page.mediabox
-        iprtr.process_page(page)
-        layout = device.get_result()
-        get_objs(layout, pagetext)
-        results.append(np.array(pagetext))
-    print(np.array(results))
-    outfp.close()  # I/Oストリームを閉じる
-    device.close() # TextConverterオブジェクトの解放
-    fp.close()     #  Fileストリームを閉じる
+    pdfOneFileData = {}
+    for index, path in enumerate(filepath):
+        fp = open(path, 'rb')
 
-    # PDFを画像変換する。
-    poppler_dir = Path(__file__).parent.absolute() / "../poppler/bin"
-    os.environ["PATH"] += os.pathsep + str(poppler_dir)
+        # PDFファイルから1ページずつ解析(テキスト抽出)処理する
+        for pageindex, page in enumerate(PDFPage.get_pages(fp)):
+            pagetext = []
+            if (size == []):
+                size = page.mediabox
+            iprtr.process_page(page)
+            layout = device.get_result()
+            get_objs(layout, pagetext)
+            if not index in dicPDFdataByFile:
+                dicPDFdataByFile[index] = {}
+                if not pageindex in dicPDFdataByFile[index]:
+                    dicPDFdataByFile[index][pageindex] = np.array(pagetext)
+                else:
+                    dicPDFdataByFile[index][pageindex].append(np.array(pagetext))
+            else :
+                if not pageindex in dicPDFdataByFile[index]:
+                    dicPDFdataByFile[index][pageindex] = np.array(pagetext)
+                else:
+                    dicPDFdataByFile[index][pageindex].append(np.array(pagetext))
+        outfp.close()  # I/Oストリームを閉じる
+        device.close() # TextConverterオブジェクトの解放
 
-    pages = convert_from_path(pdfpath, 150)
+        fp.close()     #  Fileストリームを閉じる
+        # PDFを画像変換する。
+        poppler_dir = Path(__file__).parent.absolute() / "../poppler/bin"
+        os.environ["PATH"] += os.pathsep + str(poppler_dir)
+        pdfpath_temp = path.split('\\')
+        pdfName = pdfpath_temp[len(pdfpath_temp) - 1].replace('.pdf', '')
+        pdfOneFileData[index] = [pdfName, convert_from_path(path, 150)]
 
     # canvasに1ページ目のPDFを画像として表示する。
     RESIZE_RETIO = 0.7 # 縮小倍率の規定
-    img = pages[0]
+    img = pdfOneFileData[0][1][0].copy()
     ## 枠線を追加する。
     height_ratio = img.height / size[3]
     width_ratio  = img.width / size[2]
 
     draw_img = ImageDraw.Draw(img)
     cordinate = []
-    for page in results[0]:
+    for page in dicPDFdataByFile[0][0]:
         line = page['bbox']
         x0 = line[0] * width_ratio
         y0 = img.height - line[1] * height_ratio
