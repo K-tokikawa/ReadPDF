@@ -1,3 +1,4 @@
+import time
 from pdfminer.layout import LAParams
 from pdfminer.pdfpage import PDFPage
 from pdfminer.pdfinterp import PDFResourceManager
@@ -22,14 +23,12 @@ import glob
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-
 def get_objs(layout, results):
     if not isinstance(layout, LTContainer):
         return
     for obj in layout:
         if isinstance(obj, LTTextLine):
-            results.append(
-                {'bbox': obj.bbox, 'text': obj.get_text(), 'type': type(obj)})
+            results.append({'bbox': obj.bbox, 'text' : obj.get_text(), 'type' : type(obj)})
         get_objs(obj, results)
 
 
@@ -46,6 +45,7 @@ def start_point_get(event):
     if ret:
         useTextbbox = dicPDFdataByFile[0][0][useTextIndex]['bbox']
         notOutput = []
+        print('JPEG保存処理:開始')
         for fileindex, page in enumerate(pdfOneFileData.values()):
             for dataindex, data in enumerate(page[1]):
                 filename = ''
@@ -67,23 +67,24 @@ def start_point_get(event):
                         is_file = os.path.isfile(image_path)
                     # JPEGで保存
                     data.save(str(image_path), "JPEG")
-                else:
+                else :
                     notOutput.append(fileindex)
-
+        print('JPEG保存処理:終了')
         errorTextPath = out_dir / 'Error.csv'
         if out_dir != []:
             if (os.path.isfile(errorTextPath)):
                 f = open(errorTextPath, 'w')
                 f.writelines(notOutput)
-            else:
+            else :
                 f = open(errorTextPath, 'x')
                 f.writelines(notOutput)
-
+        
         canvas.destroy()
         root.destroy()
 
 def ReadPDF(pageindex, page):
     global size
+    print(pageindex)
     pagetext = []
     if (size == []):
         size = page.mediabox
@@ -103,17 +104,30 @@ def ReadPDF(pageindex, page):
         else:
             dicPDFdataByFile[index][pageindex].append(
                 np.array(pagetext))
-
-
-async def loop_executor(pageindex, page):
+async def loop_executor_ReadPDF(pageindex, page):
     _executor = ThreadPoolExecutor(50)
     await loop.run_in_executor(_executor, ReadPDF(pageindex, page))
 
-
 async def asyncReadPDF():
-
-    asyncio.gather(*[loop_executor(pageindex, page)
+    asyncio.gather(*[loop_executor_ReadPDF(pageindex, page)
                    for pageindex, page in enumerate(PDFPage.get_pages(fp))])
+
+
+def ConvertPDF(path, page):
+    global convert
+    convert += convert_from_path(path, dpi=150,
+                                 first_page=page, last_page=page)
+
+
+async def loop_executor_ConvertPDF(path, page):
+    _executor = ThreadPoolExecutor(50)
+    await loop.run_in_executor(_executor, ConvertPDF(path, page))
+
+
+async def asyncConvertPDF():
+    allpage = len(dicPDFdataByFile[index])
+    asyncio.gather(*[loop_executor_ConvertPDF(path, page)
+                   for page in range(1, allpage)])
 
 if __name__ == "__main__":
     # 出力先をPythonコンソールするためにIOストリームを取得
@@ -155,20 +169,35 @@ if __name__ == "__main__":
 
         print(path)
         # PDFファイルから1ページずつ解析(テキスト抽出)処理する
-        loop = asyncio.get_event_loop()
+        start = time.time()
+        print('テキスト解析処理:開始')
+        try:
+            loop = asyncio.get_running_loop()
+        except:
+            loop = asyncio.get_event_loop()
         loop.run_until_complete(asyncReadPDF())
-        print('finish')
+        finish = time.time()
+        print(f'テキスト解析処理:終了 {finish - start}')
 
         outfp.close()  # I/Oストリームを閉じる
         device.close()  # TextConverterオブジェクトの解放
 
-        fp.close()  # Fileストリームを閉じる
+
         # PDFを画像変換する。
         poppler_dir = Path(__file__).parent.absolute() / "../poppler/bin"
         os.environ["PATH"] += os.pathsep + str(poppler_dir)
         pdfpath_temp = path.split('\\')
         pdfName = pdfpath_temp[len(pdfpath_temp) - 1].replace('.pdf', '')
-        pdfOneFileData[index] = [pdfName, convert_from_path(path, 150)]
+        print('PDF⇒JPEG変換処理:開始')
+        start = time.time()
+        loop = asyncio.get_event_loop()
+        global convert
+        convert = []
+        loop.run_until_complete(asyncConvertPDF())
+        pdfOneFileData[index] = [pdfName, convert]
+        fp.close()  # Fileストリームを閉じる
+        finish = time.time()
+        print(f'PDF⇒JPEG変換処理:終了 {finish - start}')
 
     # canvasに1ページ目のPDFを画像として表示する。
     RESIZE_RETIO = 0.7  # 縮小倍率の規定
