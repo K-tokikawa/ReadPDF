@@ -115,6 +115,7 @@ async def asyncReadPDF():
 
 def ConvertPDF(path, page):
     global convert
+    print(page)
     convert += convert_from_path(path, dpi=150,
                                  first_page=page, last_page=page)
 
@@ -195,6 +196,7 @@ if __name__ == "__main__":
         convert = []
         loop.run_until_complete(asyncConvertPDF())
         pdfOneFileData[index] = [pdfName, convert]
+
         fp.close()  # Fileストリームを閉じる
         finish = time.time()
         print(f'PDF⇒JPEG変換処理:終了 {finish - start}')
