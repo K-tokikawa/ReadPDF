@@ -57,12 +57,12 @@ def start_point_get(event):
                     folderpath = out_dir / f'{page[0]}'
                     if not os.path.isdir(folderpath):
                         os.makedirs(folderpath)
-                    image_path = folderpath / f'{filename}.jpeg'
+                    image_path = folderpath / f'{filename}.jpg'
                     is_file = os.path.isfile(image_path)
                     num = 0
                     while is_file:
                         num += 1
-                        existfilename = filename + f'_{num}' + '.jpeg'
+                        existfilename = filename + f'_{num}' + '.jpg'
                         image_path = folderpath / existfilename
                         is_file = os.path.isfile(image_path)
                     # JPEGで保存
