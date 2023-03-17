@@ -19,12 +19,17 @@ import numpy as np
 import TkFilePath
 import TkFolderPath
 import glob
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+
 def get_objs(layout, results):
     if not isinstance(layout, LTContainer):
         return
     for obj in layout:
         if isinstance(obj, LTTextLine):
-            results.append({'bbox': obj.bbox, 'text' : obj.get_text(), 'type' : type(obj)})
+            results.append(
+                {'bbox': obj.bbox, 'text': obj.get_text(), 'type': type(obj)})
         get_objs(obj, results)
 
 
@@ -62,7 +67,7 @@ def start_point_get(event):
                         is_file = os.path.isfile(image_path)
                     # JPEGで保存
                     data.save(str(image_path), "JPEG")
-                else :
+                else:
                     notOutput.append(fileindex)
 
         errorTextPath = out_dir / 'Error.csv'
@@ -70,20 +75,46 @@ def start_point_get(event):
             if (os.path.isfile(errorTextPath)):
                 f = open(errorTextPath, 'w')
                 f.writelines(notOutput)
-            else :
+            else:
                 f = open(errorTextPath, 'x')
                 f.writelines(notOutput)
-        
+
         canvas.destroy()
         root.destroy()
 
-def tgr_Button_Func(self):
-    iDir = os.path.abspath(os.path.dirname(__file__))
-    self.selected_file_path = tk.filedialog.askdirectory(
-        initialdir=iDir)
-    self.tgr_text.delete(0, tk.END)
-    self.tgr_text.insert(tk.END, self.selected_file_path)
-    self.tgr_path = self.selected_file_path
+def ReadPDF(pageindex, page):
+    global size
+    pagetext = []
+    if (size == []):
+        size = page.mediabox
+    iprtr.process_page(page)
+    layout = device.get_result()
+    get_objs(layout, pagetext)
+    if not index in dicPDFdataByFile:
+        dicPDFdataByFile[index] = {}
+        if not pageindex in dicPDFdataByFile[index]:
+            dicPDFdataByFile[index][pageindex] = np.array(pagetext)
+        else:
+            dicPDFdataByFile[index][pageindex].append(
+                np.array(pagetext))
+    else:
+        if not pageindex in dicPDFdataByFile[index]:
+            dicPDFdataByFile[index][pageindex] = np.array(pagetext)
+        else:
+            dicPDFdataByFile[index][pageindex].append(
+                np.array(pagetext))
+
+
+async def loop_executor(pageindex, page):
+    _executor = ThreadPoolExecutor(50)
+    await loop.run_in_executor(_executor, ReadPDF(pageindex, page))
+
+
+async def asyncReadPDF():
+
+    asyncio.gather(*[loop_executor(pageindex, page)
+                   for pageindex, page in enumerate(PDFPage.get_pages(fp))])
+
 if __name__ == "__main__":
     # 出力先をPythonコンソールするためにIOストリームを取得
     outfp = StringIO()
@@ -101,7 +132,6 @@ if __name__ == "__main__":
     app.mainloop()
     pdfpath = app.tgr_path
     pdffolderpath = app.tgr_directory
-    # pdffolderpath = 'F:\\TsuhanTests\\DirectAce\\trunk\\06_PF\\14_PF出荷GMO用納品書追加\\比較テスト\\テスト結果\\アトディーネ比較\\GMO\\データ①\\納品書'
 
     root = tk.Tk()
     root.geometry("800x400")
@@ -113,38 +143,26 @@ if __name__ == "__main__":
     filepath = []
     if len(pdffolderpath) != 0:
         filepath = glob.glob(pdffolderpath + '/*.pdf')
-    else :
+    else:
         filepath.append(pdfpath)
 
     dicPDFdataByFile = {}
+    global size
     size = []
     pdfOneFileData = {}
     for index, path in enumerate(filepath):
         fp = open(path, 'rb')
 
+        print(path)
         # PDFファイルから1ページずつ解析(テキスト抽出)処理する
-        for pageindex, page in enumerate(PDFPage.get_pages(fp)):
-            pagetext = []
-            if (size == []):
-                size = page.mediabox
-            iprtr.process_page(page)
-            layout = device.get_result()
-            get_objs(layout, pagetext)
-            if not index in dicPDFdataByFile:
-                dicPDFdataByFile[index] = {}
-                if not pageindex in dicPDFdataByFile[index]:
-                    dicPDFdataByFile[index][pageindex] = np.array(pagetext)
-                else:
-                    dicPDFdataByFile[index][pageindex].append(np.array(pagetext))
-            else :
-                if not pageindex in dicPDFdataByFile[index]:
-                    dicPDFdataByFile[index][pageindex] = np.array(pagetext)
-                else:
-                    dicPDFdataByFile[index][pageindex].append(np.array(pagetext))
-        outfp.close()  # I/Oストリームを閉じる
-        device.close() # TextConverterオブジェクトの解放
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(asyncReadPDF())
+        print('finish')
 
-        fp.close()     #  Fileストリームを閉じる
+        outfp.close()  # I/Oストリームを閉じる
+        device.close()  # TextConverterオブジェクトの解放
+
+        fp.close()  # Fileストリームを閉じる
         # PDFを画像変換する。
         poppler_dir = Path(__file__).parent.absolute() / "../poppler/bin"
         os.environ["PATH"] += os.pathsep + str(poppler_dir)
@@ -153,11 +171,11 @@ if __name__ == "__main__":
         pdfOneFileData[index] = [pdfName, convert_from_path(path, 150)]
 
     # canvasに1ページ目のPDFを画像として表示する。
-    RESIZE_RETIO = 0.7 # 縮小倍率の規定
+    RESIZE_RETIO = 0.7  # 縮小倍率の規定
     img = pdfOneFileData[0][1][0].copy()
-    ## 枠線を追加する。
+    # 枠線を追加する。
     height_ratio = img.height / size[3]
-    width_ratio  = img.width / size[2]
+    width_ratio = img.width / size[2]
 
     draw_img = ImageDraw.Draw(img)
     cordinate = []
@@ -172,13 +190,14 @@ if __name__ == "__main__":
         draw_img.rectangle(rect, outline=(0, 0, 0))
     cordinate = np.array(cordinate)*RESIZE_RETIO
     cordinate = cordinate.tolist()
-    img = img.resize(size=(int(img.width * RESIZE_RETIO), int(img.height * RESIZE_RETIO)), resample=Image.BILINEAR)
+    img = img.resize(size=(int(img.width * RESIZE_RETIO),
+                     int(img.height * RESIZE_RETIO)), resample=Image.BILINEAR)
     root = tk.Tk()
     canvas = tk.Canvas(root, width=img.width, height=img.height)
     canvas.bind("<ButtonPress-1>", start_point_get)
     canvas.pack()
 
     canvas.Photo = ImageTk.PhotoImage(img)
-    canvas.create_image(0, 0, image=canvas.Photo,anchor=tk.NW)
+    canvas.create_image(0, 0, image=canvas.Photo, anchor=tk.NW)
 
     root.mainloop()
