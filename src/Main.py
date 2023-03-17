@@ -68,7 +68,7 @@ def start_point_get(event):
                     # JPEGで保存
                     data.save(str(image_path), "JPEG")
                 else :
-                    notOutput.append(fileindex)
+                    notOutput.append(str(fileindex))
         print('JPEG保存処理:終了')
         errorTextPath = out_dir / 'Error.csv'
         if out_dir != []:
@@ -121,14 +121,14 @@ def ConvertPDF(path, page):
 
 
 async def loop_executor_ConvertPDF(path, page):
-    _executor = ThreadPoolExecutor(50)
+    _executor = ThreadPoolExecutor(100)
     await loop.run_in_executor(_executor, ConvertPDF(path, page))
 
 
 async def asyncConvertPDF():
     allpage = len(dicPDFdataByFile[index])
     asyncio.gather(*[loop_executor_ConvertPDF(path, page)
-                   for page in range(1, allpage)])
+                   for page in range(1, allpage + 1)])
 
 if __name__ == "__main__":
     # 出力先をPythonコンソールするためにIOストリームを取得
@@ -158,6 +158,7 @@ if __name__ == "__main__":
     filepath = []
     if len(pdffolderpath) != 0:
         filepath = glob.glob(pdffolderpath + '/*.pdf')
+        print(filepath)
     else:
         filepath.append(pdfpath)
 
